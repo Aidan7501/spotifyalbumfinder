@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spotify Compilation & Album Finder</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="navbar">
+      <div class="brand">
+        <svg class="spotify-logo" viewBox="0 0 24 24" width="32" height="32" fill="currentColor">
+          <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.48.66.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+        </svg>
+        <div>
+          <h1>Spotify Release Finder</h1>
+          <p class="tagline">Find every compilation, soundtrack, & album containing a song</p>
+        </div>
+      </div>
+      <div class="nav-actions">
+        <div class="status-badge" title="No Spotify Developer API or Premium needed!">
+          <span class="status-dot connected"></span>
+          <span>No API Key / No Premium Needed</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+      <!-- Hero / Search Section -->
+      <section class="search-section">
+        <div class="search-card">
+          <label for="trackInput" class="search-label">Paste Spotify Song Link or Enter Song Name</label>
+          <div class="search-input-wrap">
+            <svg class="search-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input 
+              type="text" 
+              id="trackInput" 
+              placeholder="Paste Spotify link (e.g. https://open.spotify.com/track/...) or song name (e.g. Bohemian Rhapsody)" 
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="pasteBtn" class="secondary-btn" title="Paste from clipboard">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+              </svg>
+              Paste
+            </button>
+            <button id="searchBtn" class="primary-btn">
+              <span>Find Compilations</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Quick Try Examples -->
+          <div class="quick-examples">
+            <span class="examples-label">Try popular songs featured on dozens of compilations:</span>
+            <div class="example-chips">
+              <button class="chip" data-query="https://open.spotify.com/track/6YrDpWyqywtL0BqpbVl1AM">Take On Me (a-ha)</button>
+              <button class="chip" data-query="https://open.spotify.com/track/4u7EnebtmKWzUH433cf5Qv">Bohemian Rhapsody (Queen)</button>
+              <button class="chip" data-query="Stayin Alive">Stayin' Alive (Bee Gees)</button>
+              <button class="chip" data-query="https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT">Never Gonna Give You Up (Rick Astley)</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Error / Alert Message -->
+      <div id="errorAlert" class="alert-banner hidden">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span id="errorMessage"></span>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loadingState" class="loading-state hidden">
+        <div class="spinner"></div>
+        <p class="loading-title">Scanning Catalog & Compilations...</p>
+        <p class="loading-sub">Searching across soundtrack albums, various artists collections, and releases.</p>
+      </div>
+
+      <!-- Results View -->
+      <section id="resultsSection" class="results-section hidden">
+        <!-- Target Track Summary Card -->
+        <div class="target-track-card">
+          <img id="targetTrackImage" class="target-artwork" src="" alt="Album artwork">
+          <div class="target-info">
+            <div class="target-badge-row">
+              <span class="target-tag">Target Song</span>
+              <span id="targetTrackYear" class="isrc-badge">Year: --</span>
+            </div>
+            <h2 id="targetTrackName" class="target-title">Song Title</h2>
+            <p id="targetTrackArtist" class="target-artist">Artist Name</p>
+            <p class="target-meta" id="targetTrackMeta">
+              Included on Spotify compilations & soundtrack albums below
+            </p>
+          </div>
+          <div class="target-actions">
+            <a id="targetSpotifyLink" href="#" target="_blank" rel="noopener" class="spotify-link-btn">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.48.66.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+              </svg>
+              Open Track on Spotify
+            </a>
+            <button id="targetCopyLinkBtn" type="button" class="spotify-copy-btn" title="Copy track link">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span>Copy Link</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats Overview Banner -->
+        <div class="stats-banner">
+          <div class="stat-card">
+            <span class="stat-number" id="statTotal">0</span>
+            <span class="stat-label">Total Releases Found</span>
+          </div>
+          <div class="stat-card highlight">
+            <span class="stat-number" id="statStudio">0</span>
+            <span class="stat-label">Studio Albums & Editions</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-number" id="statCompilations">0</span>
+            <span class="stat-label">Compilations & Soundtracks</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-number" id="statSingles">0</span>
+            <span class="stat-label">Singles & EPs</span>
+          </div>
+        </div>
+
+        <!-- Filter & Toolbar -->
+        <div class="toolbar">
+          <div class="tabs-group" role="tablist">
+            <button class="tab-btn active" data-filter="all">
+              All Releases <span id="allCountBadge" class="tab-badge">0</span>
+            </button>
+            <button class="tab-btn" data-filter="albums">
+              Studio Albums & Editions <span id="albumsCountBadge" class="tab-badge">0</span>
+            </button>
+            <button class="tab-btn" data-filter="compilations">
+              Compilations & Soundtracks <span id="compilationsCountBadge" class="tab-badge">0</span>
+            </button>
+            <button class="tab-btn" data-filter="singles">
+              Singles & EPs <span id="singlesCountBadge" class="tab-badge">0</span>
+            </button>
+          </div>
+
+          <div class="toolbar-right">
+            <div class="sort-wrap">
+              <label for="sortSelect">Sort:</label>
+              <select id="sortSelect">
+                <option value="date-desc">Release Date (Newest first)</option>
+                <option value="date-asc">Release Date (Oldest first)</option>
+                <option value="name-asc">Album Title (A - Z)</option>
+                <option value="tracks-desc">Track Count (Most first)</option>
+              </select>
+            </div>
+            <button id="exportCsvBtn" class="tool-btn" title="Export albums to CSV">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        <!-- Albums Grid -->
+        <div id="albumsGrid" class="albums-grid"></div>
+
+        <!-- Empty Filter Results -->
+        <div id="noResultsInFilter" class="no-results hidden">
+          <p>No albums match this filter category.</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+      <p>Powered by Open Music Catalog • No Spotify Developer Account or Premium Required</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
