@@ -31,6 +31,17 @@ function extractTrackId(input) {
 }
 
 /**
+ * Extract Spotify Album ID from link or URI formats
+ */
+function extractAlbumId(input) {
+  if (!input || typeof input !== 'string') return null;
+  const trimmed = input.trim();
+  const urlMatch = trimmed.match(/album[/:]([a-zA-Z0-9]{22})/);
+  if (urlMatch) return urlMatch[1];
+  return null;
+}
+
+/**
  * Clean track title by stripping remaster, anniversary, edition markers
  */
 function cleanSongTitle(title) {
@@ -620,13 +631,14 @@ app.post('/api/find-albums', async (req, res) => {
 
   const trimmed = input.trim();
   const trackId = extractTrackId(trimmed);
+  const albumId = !trackId ? extractAlbumId(trimmed) : null;
 
   try {
     let targetTrack = null;
     let cleanTitle = '';
     let primaryArtist = '';
 
-    // If a Spotify link or ID was provided, fetch rich metadata from Spotify Embed
+    // If a Spotify Track link or ID was provided, fetch rich metadata from Spotify Embed
     if (trackId) {
       try {
         targetTrack = await fetchSpotifyEmbedMetadata(trackId);
@@ -634,6 +646,69 @@ app.post('/api/find-albums', async (req, res) => {
         primaryArtist = targetTrack.artists?.[0] || '';
       } catch (err) {
         console.warn('Spotify embed metadata extraction failed, falling back:', err.message);
+      }
+    }
+
+    // If a Spotify Album link or ID was provided, fetch album and select best track
+    if (albumId && !targetTrack) {
+      try {
+        const albumObj = await fetchSingleSpotifyAlbum(albumId, 'Album', '');
+        const embedRes = await fetch(`https://open.spotify.com/embed/album/${albumId}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+        });
+        if (embedRes.ok) {
+          const text = await embedRes.text();
+          const matchNext = text.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+          if (matchNext) {
+            const d = JSON.parse(matchNext[1]);
+            const entity = d.props?.pageProps?.state?.data?.entity;
+            const trackList = entity?.trackList || [];
+            const albumName = entity?.name || albumObj?.name || 'Album';
+            const cleanAlb = cleanSongTitle(albumName);
+
+            // Find title track or first track
+            const bestTrack = trackList.find(t => t.title && cleanAlb && t.title.toLowerCase().includes(cleanAlb.toLowerCase())) || trackList[0];
+            const bestTrackId = bestTrack?.uri ? bestTrack.uri.replace(/^spotify:track:/, '') : null;
+
+            cleanTitle = cleanSongTitle(bestTrack?.title || albumName);
+            primaryArtist = (entity?.artists || []).map(a => a.name).join(', ') || albumObj?.artistDisplay || '';
+
+            // Also check album page og:description for artist if missing
+            if (!primaryArtist || primaryArtist === 'Artist Release') {
+              try {
+                const pageRes = await fetch(`https://open.spotify.com/album/${albumId}`, {
+                  headers: { 'User-Agent': 'facebookexternalhit/1.1' },
+                });
+                if (pageRes.ok) {
+                  const pt = await pageRes.text();
+                  const og = pt.match(/<meta property="og:description" content="([^"]+)"/);
+                  if (og) {
+                    const artistPart = og[1].split('·')[0]?.trim();
+                    if (artistPart) primaryArtist = artistPart;
+                  }
+                }
+              } catch (e) {}
+            }
+
+            targetTrack = {
+              id: bestTrackId || albumId,
+              name: bestTrack?.title || albumName,
+              artists: primaryArtist ? primaryArtist.split(', ') : ['Various Artists'],
+              artistDisplay: primaryArtist || 'Artist Release',
+              artistSpotifyId: entity?.artists?.[0]?.uri ? entity.artists[0].uri.replace(/^spotify:artist:/, '') : null,
+              originAlbumId: albumId,
+              originAlbumName: albumName,
+              durationMs: null,
+              previewUrl: bestTrack?.audioPreview?.url || null,
+              imageUrl: entity?.visualIdentity?.image?.[0]?.url || albumObj?.imageUrl || null,
+              spotifyUrl: bestTrackId ? `https://open.spotify.com/track/${bestTrackId}` : `https://open.spotify.com/album/${albumId}`,
+              releaseDate: albumObj?.releaseDate || null,
+              releaseYear: albumObj?.releaseYear || null,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Direct album metadata extraction failed:', err.message);
       }
     }
 
