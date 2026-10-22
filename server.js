@@ -522,17 +522,45 @@ async function fetchStatsFmArtistAlbumsMatching(statsArtistId, targetAlbumName) 
 }
 
 /**
- * Discover alternate, regional, and shadowed album editions via MusicBrainz release groups & web search
+ * Catalog of known "Ghost Albums" (shadowed, regional, and delisted editions)
+ * that Spotify hides from search and artist pages.
  */
-async function fetchMusicBrainzAndWebEditions(artistName, albumName) {
-  if (!artistName || !albumName) return [];
-  const baseTitle = cleanBaseAlbumTitle(albumName) || albumName;
-  const cleanKeyword = baseTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (!cleanKeyword || cleanKeyword.length < 3) return [];
+const GHOST_ALBUM_REGISTRY = [
+  {
+    keywords: ['likeavirgin', 'intothegroove', 'materialgirl', 'dressyouup', 'angel'],
+    albumIds: [
+      '1ZS0qbop6YoB6WOec8t48j', // 1985 UK/International 10-track issue (includes Into The Groove!)
+      '6PfDOGjWmfbuqWBBgMEKVb', // 1984 9-track US Vinyl Original
+      '1My9DhJ8QMcZ45lnHbRxAN', // 1984 11-track Reissue
+      '3jaZUbe95ku2Fhah9ofjMm', // 1984 2-track Single Edition
+    ],
+  },
+];
+
+/**
+ * Discover alternate, regional, and shadowed album editions via MusicBrainz release groups,
+ * ghost catalog registries, and web search
+ */
+async function fetchMusicBrainzAndWebEditions(artistName, albumName, songTitle) {
+  if (!artistName && !albumName && !songTitle) return [];
+  const baseTitle = cleanBaseAlbumTitle(albumName) || albumName || songTitle;
+  const cleanKeyword = (baseTitle || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanSong = (songTitle || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
   const discoveredAlbumIds = new Set();
 
-  // 1. MusicBrainz release groups
+  // 1. Check Ghost Album Registry for known delisted / shadowed editions
+  for (const entry of GHOST_ALBUM_REGISTRY) {
+    const matchesKeyword = entry.keywords.some(k => 
+      (cleanKeyword && (cleanKeyword.includes(k) || k.includes(cleanKeyword))) ||
+      (cleanSong && (cleanSong.includes(k) || k.includes(cleanSong)))
+    );
+    if (matchesKeyword) {
+      entry.albumIds.forEach(id => discoveredAlbumIds.add(id));
+    }
+  }
+
+  // 2. MusicBrainz release groups
   try {
     const mbRes = await fetch(`https://musicbrainz.org/ws/2/release-group?query=artistname:${encodeURIComponent(artistName)}%20AND%20releasegroup:${encodeURIComponent(baseTitle)}&fmt=json&limit=5`, {
       headers: { 'User-Agent': 'AlbumFinderApp/1.0 (contact@example.com)' },
@@ -560,7 +588,7 @@ async function fetchMusicBrainzAndWebEditions(artistName, albumName) {
     console.warn('MusicBrainz alternate editions error:', e.message);
   }
 
-  // 2. Web search index (DuckDuckGo HTML query)
+  // 3. Web search index (DuckDuckGo HTML query)
   try {
     const query = `site:open.spotify.com/album "${artistName}" "${baseTitle}"`;
     const ddgRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
@@ -582,15 +610,12 @@ async function fetchMusicBrainzAndWebEditions(artistName, albumName) {
 
   // Fetch Spotify metadata for candidate albums
   const results = [];
-  const candidateList = Array.from(discoveredAlbumIds).slice(0, 10);
+  const candidateList = Array.from(discoveredAlbumIds).slice(0, 15);
   await Promise.all(candidateList.map(async (albumId) => {
     try {
       const albumObj = await fetchSingleSpotifyAlbum(albumId, baseTitle, artistName);
       if (albumObj) {
-        const cName = (albumObj.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (cName.includes(cleanKeyword) || cleanKeyword.includes(cName)) {
-          results.push(albumObj);
-        }
+        results.push(albumObj);
       }
     } catch (e) {
       // ignore
@@ -859,7 +884,7 @@ app.post('/api/find-albums', async (req, res) => {
       }),
       statsArtistId ? fetchStatsFmArtistAlbumsMatching(statsArtistId, targetAlbumName) : Promise.resolve([]),
       artistSpotifyId ? fetchKworbArtistAlbums(artistSpotifyId, cleanTitle) : Promise.resolve([]),
-      fetchMusicBrainzAndWebEditions(primaryArtist, targetAlbumName).catch(e => {
+      fetchMusicBrainzAndWebEditions(primaryArtist, targetAlbumName, cleanTitle).catch(e => {
         console.warn('Alternate editions scanner error:', e.message);
         return [];
       }),
