@@ -522,6 +522,85 @@ async function fetchStatsFmArtistAlbumsMatching(statsArtistId, targetAlbumName) 
 }
 
 /**
+ * Discover alternate, regional, and shadowed album editions via MusicBrainz release groups & web search
+ */
+async function fetchMusicBrainzAndWebEditions(artistName, albumName) {
+  if (!artistName || !albumName) return [];
+  const baseTitle = cleanBaseAlbumTitle(albumName) || albumName;
+  const cleanKeyword = baseTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!cleanKeyword || cleanKeyword.length < 3) return [];
+
+  const discoveredAlbumIds = new Set();
+
+  // 1. MusicBrainz release groups
+  try {
+    const mbRes = await fetch(`https://musicbrainz.org/ws/2/release-group?query=artistname:${encodeURIComponent(artistName)}%20AND%20releasegroup:${encodeURIComponent(baseTitle)}&fmt=json&limit=5`, {
+      headers: { 'User-Agent': 'AlbumFinderApp/1.0 (contact@example.com)' },
+    });
+    if (mbRes.ok) {
+      const mbData = await mbRes.json();
+      const rgs = mbData['release-groups'] || [];
+      for (const rg of rgs.slice(0, 3)) {
+        if (!rg.id) continue;
+        const relRes = await fetch(`https://musicbrainz.org/ws/2/release?release-group=${rg.id}&inc=url-rels&fmt=json&limit=50`, {
+          headers: { 'User-Agent': 'AlbumFinderApp/1.0 (contact@example.com)' },
+        });
+        if (relRes.ok) {
+          const relData = await relRes.json();
+          (relData.releases || []).forEach(r => {
+            (r.relations || []).forEach(rel => {
+              const m = (rel.url?.resource || '').match(/open\.spotify\.com\/album\/([a-zA-Z0-9]{22})/);
+              if (m) discoveredAlbumIds.add(m[1]);
+            });
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('MusicBrainz alternate editions error:', e.message);
+  }
+
+  // 2. Web search index (DuckDuckGo HTML query)
+  try {
+    const query = `site:open.spotify.com/album "${artistName}" "${baseTitle}"`;
+    const ddgRes = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+    if (ddgRes.ok) {
+      const text = await ddgRes.text();
+      const matches = [...text.matchAll(/open\.spotify\.com\/album\/([a-zA-Z0-9]{22})/g)];
+      matches.forEach(m => discoveredAlbumIds.add(m[1]));
+    }
+  } catch (e) {
+    // web search fallback fails gracefully
+  }
+
+  if (discoveredAlbumIds.size === 0) return [];
+
+  // Fetch Spotify metadata for candidate albums
+  const results = [];
+  const candidateList = Array.from(discoveredAlbumIds).slice(0, 10);
+  await Promise.all(candidateList.map(async (albumId) => {
+    try {
+      const albumObj = await fetchSingleSpotifyAlbum(albumId, baseTitle, artistName);
+      if (albumObj) {
+        const cName = (albumObj.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cName.includes(cleanKeyword) || cleanKeyword.includes(cName)) {
+          results.push(albumObj);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }));
+
+  return results;
+}
+
+/**
  * Fetch all albums and compilations for a stats.fm track ID
  * Strictly filters for albums that are available on Spotify with verified direct Spotify album IDs
  */
@@ -768,10 +847,11 @@ app.post('/api/find-albums', async (req, res) => {
     // Source B: Stats.fm track albums (compilations, soundtracks, linked editions)
     // Source C: Stats.fm artist discography matching the target album name
     // Source D: Kworb for artist discography releases (Anniversary, Deluxe, etc.)
+    // Source E: MusicBrainz release groups & web search for shadowed / alternate editions
     const statsArtistId = statsTrack?.statsArtistId || (statsTrack?.artists?.[0]?.id || null);
     const targetAlbumName = targetTrack.originAlbumName || statsTrack.albums?.[0]?.name || cleanTitle;
 
-    const [originAlbum, statsAlbums, artistEditions, kworbAlbums] = await Promise.all([
+    const [originAlbum, statsAlbums, artistEditions, kworbAlbums, alternateEditions] = await Promise.all([
       targetTrack.originAlbumId ? fetchSingleSpotifyAlbum(targetTrack.originAlbumId, targetTrack.originAlbumName, primaryArtist) : Promise.resolve(null),
       fetchStatsFmAlbums(statsTrack.id, primaryArtist).catch(e => {
         console.warn('stats.fm albums error:', e.message);
@@ -779,6 +859,10 @@ app.post('/api/find-albums', async (req, res) => {
       }),
       statsArtistId ? fetchStatsFmArtistAlbumsMatching(statsArtistId, targetAlbumName) : Promise.resolve([]),
       artistSpotifyId ? fetchKworbArtistAlbums(artistSpotifyId, cleanTitle) : Promise.resolve([]),
+      fetchMusicBrainzAndWebEditions(primaryArtist, targetAlbumName).catch(e => {
+        console.warn('Alternate editions scanner error:', e.message);
+        return [];
+      }),
     ]);
 
     // Merge and deduplicate by spotifyAlbumId
@@ -791,7 +875,15 @@ app.post('/api/find-albums', async (req, res) => {
       allAlbums.push(originAlbum);
     }
 
-    // 2. Add kworb discography editions
+    // 2. Add alternate / shadowed / regional editions
+    for (const a of (alternateEditions || [])) {
+      if (!seenSpotifyIds.has(a.spotifyAlbumId)) {
+        seenSpotifyIds.add(a.spotifyAlbumId);
+        allAlbums.push(a);
+      }
+    }
+
+    // 3. Add kworb discography editions
     for (const a of kworbAlbums) {
       if (!seenSpotifyIds.has(a.spotifyAlbumId)) {
         seenSpotifyIds.add(a.spotifyAlbumId);
@@ -799,7 +891,7 @@ app.post('/api/find-albums', async (req, res) => {
       }
     }
 
-    // 3. Add artist discography editions from stats.fm
+    // 4. Add artist discography editions from stats.fm
     for (const a of artistEditions) {
       if (!seenSpotifyIds.has(a.spotifyAlbumId)) {
         seenSpotifyIds.add(a.spotifyAlbumId);
@@ -807,7 +899,7 @@ app.post('/api/find-albums', async (req, res) => {
       }
     }
 
-    // 4. Add stats.fm compilations and multi-artist releases
+    // 5. Add stats.fm compilations and multi-artist releases
     for (const a of statsAlbums) {
       if (!seenSpotifyIds.has(a.spotifyAlbumId)) {
         seenSpotifyIds.add(a.spotifyAlbumId);
