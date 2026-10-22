@@ -727,8 +727,14 @@ body {
 .card-footer {
   margin-top: auto;
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: center;
+}
+
+.card-btn-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
 }
 
 .card-link-btn {
@@ -784,6 +790,44 @@ body {
   color: var(--spotify-green);
 }
 
+.card-add-list-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(30, 215, 96, 0.12);
+  border: 1px solid rgba(30, 215, 96, 0.35);
+  color: var(--spotify-green);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  white-space: nowrap;
+}
+
+.card-add-list-btn:hover {
+  background: rgba(30, 215, 96, 0.22);
+  border-color: var(--spotify-green);
+  color: #fff;
+}
+
+.card-add-list-btn.active {
+  background: var(--spotify-green);
+  border-color: var(--spotify-green);
+  color: #000;
+  font-weight: 700;
+}
+
+.card-add-list-btn.active:hover {
+  background: #1aa34a;
+  border-color: #1aa34a;
+  color: #fff;
+}
+
 .preview-play-btn {
   background: rgba(255, 255, 255, 0.08);
   border: none;
@@ -814,6 +858,141 @@ body {
   padding: 60px 20px;
   color: var(--text-secondary);
   font-size: 1rem;
+}
+
+/* Selected Links Panel (Copyable Text Box) */
+.selected-links-panel {
+  margin-top: 36px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-fast);
+}
+
+.selected-links-panel:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.selected-links-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.selected-links-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--spotify-green);
+}
+
+.selected-links-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.selected-links-desc {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.selected-links-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.list-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.list-action-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.list-action-btn.danger {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.list-action-btn.danger:hover {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: #f87171;
+  color: #fff;
+}
+
+.list-action-btn.primary {
+  background: var(--spotify-green);
+  border-color: var(--spotify-green);
+  color: #000;
+  font-weight: 700;
+}
+
+.list-action-btn.primary:hover {
+  background: #1aa34a;
+  border-color: #1aa34a;
+  color: #fff;
+}
+
+.list-action-btn.primary.copied {
+  background: #fff;
+  border-color: #fff;
+  color: #000;
+}
+
+.selected-links-body {
+  width: 100%;
+}
+
+.selected-links-textarea {
+  width: 100%;
+  min-height: 120px;
+  max-height: 350px;
+  resize: vertical;
+  background: #0d0f12;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: #a7f3d0;
+  font-family: 'Consolas', 'Courier New', monospace, sans-serif;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  outline: none;
+  transition: var(--transition-fast);
+  white-space: pre;
+}
+
+.selected-links-textarea:focus {
+  border-color: var(--spotify-green);
+  box-shadow: 0 0 0 2px rgba(30, 215, 96, 0.2);
+}
+
+.selected-links-textarea::placeholder {
+  color: var(--text-muted);
+  font-family: inherit;
+  font-style: italic;
 }
 
 /* Modal */

@@ -5,6 +5,7 @@ let appState = {
   activeSort: 'date-desc',
   currentAudio: null,
   playingAudioUrl: null,
+  selectedLinks: new Set(),
 };
 
 // DOM Elements
@@ -39,6 +40,13 @@ const compilationsCountBadge = document.getElementById('compilationsCountBadge')
 const allCountBadge = document.getElementById('allCountBadge');
 const albumsCountBadge = document.getElementById('albumsCountBadge');
 const singlesCountBadge = document.getElementById('singlesCountBadge');
+
+const selectedLinksPanel = document.getElementById('selectedLinksPanel');
+const selectedLinksCount = document.getElementById('selectedLinksCount');
+const selectAllVisibleBtn = document.getElementById('selectAllVisibleBtn');
+const clearListBtn = document.getElementById('clearListBtn');
+const copyAllLinksBtn = document.getElementById('copyAllLinksBtn');
+const selectedLinksTextarea = document.getElementById('selectedLinksTextarea');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -137,6 +145,116 @@ function setupEventListeners() {
       }, 2000);
     });
   }
+
+  // Add to List action via event delegation on albumsGrid
+  albumsGrid.addEventListener('click', (e) => {
+    const addBtn = e.target.closest('.card-add-list-btn');
+    if (!addBtn) return;
+    const url = addBtn.dataset.url;
+    if (!url) return;
+
+    if (appState.selectedLinks.has(url)) {
+      appState.selectedLinks.delete(url);
+    } else {
+      appState.selectedLinks.add(url);
+    }
+    updateSelectedLinksUI();
+  });
+
+  // Select all currently visible albums in the active filter
+  if (selectAllVisibleBtn) {
+    selectAllVisibleBtn.addEventListener('click', () => {
+      const visibleAlbums = filterAlbums(appState.albums, appState.activeFilter);
+      visibleAlbums.forEach((album) => {
+        if (album.spotifyUrl) {
+          appState.selectedLinks.add(album.spotifyUrl);
+        }
+      });
+      updateSelectedLinksUI();
+    });
+  }
+
+  // Clear list
+  if (clearListBtn) {
+    clearListBtn.addEventListener('click', () => {
+      appState.selectedLinks.clear();
+      updateSelectedLinksUI();
+    });
+  }
+
+  // Copy all selected links (separated by enter key)
+  if (copyAllLinksBtn) {
+    copyAllLinksBtn.addEventListener('click', async () => {
+      const text = Array.from(appState.selectedLinks).join('\n');
+      if (!text) {
+        showError('No links in your list to copy yet. Click "Add to List" on any album first.');
+        setTimeout(hideError, 2500);
+        return;
+      }
+
+      await copyToClipboard(text);
+
+      const originalHtml = copyAllLinksBtn.innerHTML;
+      copyAllLinksBtn.classList.add('copied');
+      copyAllLinksBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>Copied ${appState.selectedLinks.size} Links!</span>
+      `;
+
+      setTimeout(() => {
+        copyAllLinksBtn.classList.remove('copied');
+        copyAllLinksBtn.innerHTML = originalHtml;
+      }, 2000);
+    });
+  }
+
+  // Auto-select text in textarea on click
+  if (selectedLinksTextarea) {
+    selectedLinksTextarea.addEventListener('focus', () => {
+      if (selectedLinksTextarea.value.trim()) {
+        selectedLinksTextarea.select();
+      }
+    });
+  }
+}
+
+function updateSelectedLinksUI() {
+  const linksArray = Array.from(appState.selectedLinks);
+  if (selectedLinksCount) {
+    selectedLinksCount.textContent = linksArray.length;
+  }
+  if (selectedLinksTextarea) {
+    selectedLinksTextarea.value = linksArray.join('\n');
+  }
+
+  // Sync state on rendered cards in the grid
+  const allAddBtns = albumsGrid.querySelectorAll('.card-add-list-btn');
+  allAddBtns.forEach((btn) => {
+    const url = btn.dataset.url;
+    const isSelected = appState.selectedLinks.has(url);
+    if (isSelected) {
+      btn.classList.add('active');
+      btn.title = 'Click to remove from list';
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>Added to List</span>
+      `;
+    } else {
+      btn.classList.remove('active');
+      btn.title = 'Add to copyable list';
+      btn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>Add to List</span>
+      `;
+    }
+  });
 }
 
 async function copyToClipboard(text) {
@@ -207,6 +325,8 @@ async function performSearch() {
 function displayResults(data) {
   appState.currentTrack = data.targetTrack;
   appState.albums = data.albums || [];
+  appState.selectedLinks = new Set();
+  updateSelectedLinksUI();
 
   // Update target track banner
   const track = data.targetTrack;
@@ -275,8 +395,7 @@ function renderAlbums() {
 
     const isVarious = (album.artistDisplay || '').toLowerCase().includes('various artists');
     const releaseYear = album.releaseYear || (album.releaseDate ? album.releaseDate.slice(0, 4) : 'Catalog');
-    const hasPreview = Boolean(appState.currentTrack?.previewUrl);
-    const isPlaying = appState.playingAudioUrl === appState.currentTrack?.previewUrl;
+    const isSelected = appState.selectedLinks.has(album.spotifyUrl);
 
     card.innerHTML = `
       <div class="album-art-wrap">
@@ -292,26 +411,44 @@ function renderAlbums() {
       </div>
 
       <div class="card-footer">
-        <a href="${album.spotifyUrl}" target="_blank" rel="noopener" class="card-link-btn" title="Open in Spotify">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <line x1="10" y1="14" x2="21" y2="3"></line>
-          </svg>
-          <span>Open</span>
-        </a>
-        <button type="button" class="card-copy-btn" data-url="${album.spotifyUrl}" title="Copy Spotify album link">
-          <svg class="copy-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>
-          <span class="copy-label">Copy Link</span>
+        <div class="card-btn-row">
+          <a href="${album.spotifyUrl}" target="_blank" rel="noopener" class="card-link-btn" title="Open in Spotify">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+            <span>Open</span>
+          </a>
+          <button type="button" class="card-copy-btn" data-url="${album.spotifyUrl}" title="Copy Spotify album link">
+            <svg class="copy-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span class="copy-label">Copy Link</span>
+          </button>
+        </div>
+        <button type="button" class="card-add-list-btn ${isSelected ? 'active' : ''}" data-url="${album.spotifyUrl}" title="${isSelected ? 'Click to remove from list' : 'Add to copyable list'}">
+          ${isSelected ? `
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>Added to List</span>
+          ` : `
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>Add to List</span>
+          `}
         </button>
       </div>
     `;
 
     albumsGrid.appendChild(card);
   });
+
+  updateSelectedLinksUI();
 }
 
 function filterAlbums(albums, filter) {
